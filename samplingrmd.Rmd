@@ -18,6 +18,127 @@ library(ggplot2)
 
 
 ## Functions
+
+
+#Function for training agt model with sampling. samSize = 1 should give ordinary agt model
+#Forced continued learning should be set to TRUE as generalization loss reduction estimator is not functioning
+#Returns list containing:
+#mod - list of all agt models(trees)
+#gen.loss - vector of Estimated generalization loss for all agt models(trees)
+#train.loss - vector of training loss at each iteration
+#Nleaves - Vector of nleaves of all agt models(trees)
+sampling.agt.train <- function(samSize, learnRate, Nrounds, Xtrain, Ytrain, 
+                               force_continued_learning = FALSE, bootstrap = FALSE){
+  
+  gen.loss = matrix(0,Nrounds,1)
+  train.loss = matrix(0,Nrounds,1)
+  nleaves = matrix(0,Nrounds,1)
+  modlist = list()
+  i = 1
+  
+  reduction = TRUE
+  
+  if (samSize == 1){
+    x.train.samp = x.train
+    y.train.samp = y.train
+  } else{
+    smp_size <- floor(samSize * nrow(x.train))
+    train_ind <- sample(seq_len(nrow(x.train)), size = smp_size, replace = bootstrap)
+    x.train.samp <- x.train[train_ind, ]
+    y.train.samp <- y.train[train_ind, ]
+  }
+  
+  #Train first tree with initial prediction
+  cand.mod <- gbt.train(y.train.samp, x.train.samp, learnRate, nrounds = 1,
+                        verbose = 0, greedy_complexities = F)
+  
+  gen.loss[i,1] = cand.mod$estimate_generalization_loss(0)
+  nleaves[i,1] = cand.mod$get_num_trees()
+  
+  train.pred = matrix(numeric(nrow(y.train)))
+  
+  while (reduction & i<(Nrounds)){
+    
+    modlist = c(modlist, list(cand.mod))
+    
+    samp.mod = cand.mod
+    
+    train.pred <- train.pred + predict(samp.mod, x.train)
+    
+    
+    if (samSize == 1){
+      x.train.samp = x.train
+      y.train.samp = y.train
+      train.pred.samp = train.pred
+    } else{
+      smp_size <- floor(samSize * nrow(x.train))
+      train_ind <- sample(seq_len(nrow(x.train)), size = smp_size, replace=bootstrap)
+      x.train.samp <- x.train[train_ind, ]
+      y.train.samp <- y.train[train_ind, ]
+      train.pred.samp <- train.pred[train_ind, ]
+    }
+    
+    #Train trees without initial prediction by previous_pred
+    cand.mod <- gbt.train(y.train.samp, x.train.samp, learnRate, nrounds = 1,
+                          verbose = 0, greedy_complexities = F, previous_pred = train.pred.samp)
+    i = i+1
+    gen.loss[i,1] = cand.mod$estimate_generalization_loss(0)
+    train.loss[i-1,1] = loss_mse(train.pred, y.train)
+    nleaves[i,1] = cand.mod$get_num_leaves()
+    if(!force_continued_learning){
+      reduction = (gen.loss[i,1]-gen.loss[i-1,1] < 0)
+    }
+    
+  }
+  
+  mod <- list("mod" = modlist, "gen.loss" = gen.loss, "train.loss" = train.loss, 
+              "Nleaves" = nleaves, "Nrounds" = Nrounds, "SmpSize" = samSize)
+  
+  return (mod)
+}
+
+
+
+#Function for predicting with sampling.agt model. 
+#Loops through all trees and adds to prediction.
+sampling.agt.pred <- function(mod, Xtest){
+  test.pred = matrix(numeric(nrow(y.test)))
+  for (i in 1:length(mod)){
+    test.pred <- test.pred + predict(mod[[i]], Xtest)
+  }
+  return(test.pred)
+}
+
+
+#Function for calculating loss with sampling.agt model.
+#Equal to sampling.agt.pred, but calculates loss at each iteration
+sampling.agt.loss <- function(mod, Xtest, Ytest){
+  loss = matrix(numeric(length(mod)))
+  test.pred = matrix(numeric(nrow(y.test)))
+  for (i in 1:length(mod)){
+    test.pred <- test.pred + predict(mod[[i]], Xtest)
+    loss[i] <- loss_mse(Ytest, test.pred)
+  }
+  return(loss)
+}
+
+#Function for calculating loss for agt model. 
+agt.loss <- function(mod, Xtest, Ytest){
+  loss = matrix(numeric(length(mod$get_num_trees())))
+  for (i in 1:mod$get_num_trees()){
+    test.pred <- mod$predict2(Xtest, i)
+    loss[i] <- loss_mse(Ytest, test.pred)
+  }
+  return(loss)
+}
+
+
+#Loss function
+loss_mse <- function(y,y.hat){
+  sum((y-y.hat)^2)
+}
+
+
 ```{r}
 #Dataset generator function
 dataset <- function(i, seed){
@@ -216,125 +337,6 @@ dataset <- function(i, seed){
                           
                         }
 } 
-
-#Loss function
-loss_mse <- function(y,y.hat){
-  sum((y-y.hat)^2)
-}
-
-
-
-#Function for training agt model with sampling. samSize = 1 should give ordinary agt model
-#Forced continued learning should be set to TRUE as generalization loss reduction estimator is not functioning
-#Returns list containing:
-#mod - list of all agt models(trees)
-#gen.loss - vector of Estimated generalization loss for all agt models(trees)
-#train.loss - vector of training loss at each iteration
-#Nleaves - Vector of nleaves of all agt models(trees)
-sampling.agt.train <- function(samSize, learnRate, Nrounds, Xtrain, Ytrain, 
-                               force_continued_learning = FALSE, bootstrap = FALSE){
-  
-  gen.loss = matrix(0,Nrounds,1)
-  train.loss = matrix(0,Nrounds,1)
-  nleaves = matrix(0,Nrounds,1)
-  modlist = list()
-  i = 1
-  
-  reduction = TRUE
-  
-  if (samSize == 1){
-    x.train.samp = x.train
-    y.train.samp = y.train
-  } else{
-    smp_size <- floor(samSize * nrow(x.train))
-    train_ind <- sample(seq_len(nrow(x.train)), size = smp_size, replace = bootstrap)
-    x.train.samp <- x.train[train_ind, ]
-    y.train.samp <- y.train[train_ind, ]
-  }
-  
-  #Train first tree with initial prediction
-  cand.mod <- gbt.train(y.train.samp, x.train.samp, learnRate, nrounds = 1,
-                        verbose = 0, greedy_complexities = F)
-  
-  gen.loss[i,1] = cand.mod$estimate_generalization_loss(0)
-  nleaves[i,1] = cand.mod$get_num_trees()
-  
-  train.pred = matrix(numeric(nrow(y.train)))
-  
-  while (reduction & i<(Nrounds)){
-    
-    modlist = c(modlist, list(cand.mod))
-    
-    samp.mod = cand.mod
-    
-    train.pred <- train.pred + predict(samp.mod, x.train)
-    
-    
-    if (samSize == 1){
-      x.train.samp = x.train
-      y.train.samp = y.train
-      train.pred.samp = train.pred
-    } else{
-      smp_size <- floor(samSize * nrow(x.train))
-      train_ind <- sample(seq_len(nrow(x.train)), size = smp_size, replace=bootstrap)
-      x.train.samp <- x.train[train_ind, ]
-      y.train.samp <- y.train[train_ind, ]
-      train.pred.samp <- train.pred[train_ind, ]
-    }
-    
-    #Train trees without initial prediction by previous_pred
-    cand.mod <- gbt.train(y.train.samp, x.train.samp, learnRate, nrounds = 1,
-                          verbose = 0, greedy_complexities = F, previous_pred = train.pred.samp)
-    i = i+1
-    gen.loss[i,1] = cand.mod$estimate_generalization_loss(0)
-    train.loss[i-1,1] = loss_mse(train.pred, y.train)
-    nleaves[i,1] = cand.mod$get_num_leaves()
-    if(!force_continued_learning){
-      reduction = (gen.loss[i,1]-gen.loss[i-1,1] < 0)
-    }
-    
-  }
-  
-  mod <- list("mod" = modlist, "gen.loss" = gen.loss, "train.loss" = train.loss, 
-              "Nleaves" = nleaves, "Nrounds" = Nrounds, "SmpSize" = samSize)
-  
-  return (mod)
-}
-
-
-
-#Function for predicting with sampling.agt model. 
-#Loops through all trees and adds to prediction.
-sampling.agt.pred <- function(mod, Xtest){
-  test.pred = matrix(numeric(nrow(y.test)))
-  for (i in 1:length(mod)){
-    test.pred <- test.pred + predict(mod[[i]], Xtest)
-  }
-  return(test.pred)
-}
-
-
-#Function for calculating loss with sampling.agt model.
-#Equal to sampling.agt.pred, but calculates loss at each iteration
-sampling.agt.loss <- function(mod, Xtest, Ytest){
-  loss = matrix(numeric(length(mod)))
-  test.pred = matrix(numeric(nrow(y.test)))
-  for (i in 1:length(mod)){
-    test.pred <- test.pred + predict(mod[[i]], Xtest)
-    loss[i] <- loss_mse(Ytest, test.pred)
-  }
-  return(loss)
-}
-
-#Function for calculating loss for agt model. 
-agt.loss <- function(mod, Xtest, Ytest){
-  loss = matrix(numeric(length(mod$get_num_trees())))
-  for (i in 1:mod$get_num_trees()){
-    test.pred <- mod$predict2(Xtest, i)
-    loss[i] <- loss_mse(Ytest, test.pred)
-  }
-  return(loss)
-}
 
 ```
 
