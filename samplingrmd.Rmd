@@ -19,7 +19,7 @@ library(ggplot2)
 
 ## Functions
 
-
+```{r}
 #Function for training agt model with sampling. samSize = 1 should give ordinary agt model
 #Forced continued learning should be set to TRUE as generalization loss reduction estimator is not functioning
 #Returns list containing:
@@ -139,7 +139,7 @@ loss_mse <- function(y,y.hat){
 }
 
 
-```{r}
+
 #Dataset generator function
 dataset <- function(i, seed){
   
