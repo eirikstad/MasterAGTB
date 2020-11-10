@@ -1,0 +1,616 @@
+---
+title: "Sampling test"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+## Necessary libraries
+```{r}
+library(MASS)
+library(ISLR)
+library(ElemStatLearn)
+library(agtboost)
+library(ggplot2)
+```
+
+
+
+
+## Functions
+```{r}
+#Dataset generator function
+dataset <- function(i, seed){
+  
+  # Returns training and test datasets for x and y
+  # i = 1:7 returns mse datasets
+  # i = 8:12 returns logloss datasets
+  # i = 1: Boston
+  # i = 2: ozone
+  # i = 3: Auto
+  # i = 4: Carseats
+  # i = 5: College
+  # i = 6: Hitters
+  # i = 7: Wage
+  # i = 8: Caravan
+  # i = 9: Default
+  # i = 10: OJ
+  # i = 11: Smarket
+  # i = 12: Weekly
+  
+  # reproducibility
+  set.seed(seed) 
+  
+  if(i==1){
+    # boston
+    data(Boston)
+    medv_col <- which(colnames(Boston)=="medv")
+    n_full <- nrow(Boston)
+    ind_train <- sample(n_full, 0.5*n_full)
+    x.train <<- as.matrix(Boston[ind_train,-medv_col])
+    y.train <<- as.matrix(log(Boston[ind_train,medv_col]))
+    x.test <<- as.matrix(Boston[-ind_train,-medv_col])
+    y.test <<- as.matrix(log(Boston[-ind_train,medv_col]))
+    
+  }else 
+    if(i==2){
+      # ozone
+      data(ozone)
+      n_full <- nrow(ozone)
+      ind_train <- sample(n_full, 0.5*n_full)
+      x.train <<- as.matrix(log(ozone[ind_train,-1]))
+      y.train <<- as.matrix(log(ozone[ind_train,1]))
+      x.test <<- as.matrix(log(ozone[-ind_train,-1]))
+      y.test <<- as.matrix(log(ozone[-ind_train,1]))
+      
+    }else 
+      if(i==3){
+        
+        # auto
+        data("Auto")
+        dim(Auto)
+        mpg_col <- which(colnames(Auto)=="mpg")
+        n_full <- nrow(Auto)
+        data <- model.matrix(mpg~.,data=Auto)[,-1]
+        dim(data)
+        ind_train <- sample(n_full, 0.5*n_full)
+        x.train <<- as.matrix(data[ind_train, ])
+        y.train <<- as.matrix(Auto[ind_train, mpg_col])
+        x.test <<- as.matrix(data[-ind_train, ])
+        y.test <<- as.matrix(Auto[-ind_train, mpg_col])
+      }else 
+        if(i==4){
+          # Carseats - sales - mse
+          data("Carseats")
+          dim(Carseats)
+          Carseats =na.omit(Carseats)
+          dim(Carseats)
+          sales_col <- which(colnames(Carseats)=="Sales")
+          n_full <- nrow(Carseats)
+          data <- model.matrix(Sales~., data=Carseats)[,-1]
+          dim(data)
+          ind_train <- sample(n_full, 0.7*n_full)
+          x.train <<- as.matrix(data[ind_train, ])
+          y.train <<- as.matrix(Carseats[ind_train, sales_col])
+          x.test <<- as.matrix(data[-ind_train, ])
+          y.test <<- as.matrix(Carseats[-ind_train, sales_col])
+          
+        }else 
+          if(i==5){
+            
+            # College - apps: applications received - mse
+            data("College")
+            dim(College)
+            n_full <- nrow(College)
+            ind_train <- sample(n_full, 0.7*n_full)
+            data <- model.matrix(Apps~., data=College)[,-1]
+            dim(data)
+            x.train <<- as.matrix(data[ind_train, ])
+            y.train <<- as.matrix(College[ind_train, "Apps"])
+            x.test <<- as.matrix(data[-ind_train, ])
+            y.test <<- as.matrix(College[-ind_train, "Apps"])
+            
+          }else 
+            if(i==6){
+              # Hitters: Salary - mse
+              data("Hitters")
+              dim(Hitters)
+              Hitters =na.omit(Hitters)
+              dim(Hitters)
+              n_full <- nrow(Hitters)
+              ind_train <- sample(n_full, 0.7*n_full)
+              data <- model.matrix(Salary~., data=Hitters)[,-1]
+              dim(data)
+              x.train <<- as.matrix(data[ind_train, ])
+              y.train <<- as.matrix(Hitters[ind_train, "Salary"])
+              x.test <<- as.matrix(data[-ind_train, ])
+              y.test <<- as.matrix(Hitters[-ind_train, "Salary"])
+              
+            }else 
+              if(i==7){
+                # Wage - Wage - mse -- note: extremely deep trees!
+                data(Wage)
+                dim(Wage)
+                n_full <- nrow(Wage)
+                ind_train <- sample(n_full, 0.7*n_full)
+                data <- model.matrix(wage~., data=Wage)[,-1]
+                dim(data)
+                x.train <<- as.matrix(data[ind_train, ])
+                y.train <<- as.matrix(Wage[ind_train, "wage"])
+                x.test <<- as.matrix(data[-ind_train, ])
+                y.test <<- as.matrix(Wage[-ind_train, "wage"])
+                
+              }else 
+                if(i==8){
+                  # Caravan - classification
+                  data(Caravan)
+                  dim(Caravan)
+                  Caravan = na.omit(Caravan)
+                  dim(Caravan)
+                  n_full <- nrow(Caravan)
+                  ind_train <- sample(n_full, 0.7*n_full)
+                  data <- model.matrix(Purchase~., data=Caravan)[,-1]
+                  dim(data)
+                  x.train <<- as.matrix(data[ind_train, ])
+                  y.train <<- as.matrix(ifelse(Caravan[ind_train, "Purchase"]=="Yes",1,0))
+                  x.test <<- as.matrix(data[-ind_train, ])
+                  y.test <<- as.matrix(ifelse(Caravan[-ind_train, "Purchase"]=="Yes", 1, 0))
+                  
+                }else 
+                  if(i==9){
+                    # Default - Default: if default on credit - classification
+                    data("Default")
+                    dim(Default)
+                    n_full <- nrow(Default)
+                    ind_train <- sample(n_full, 0.7*n_full)
+                    data <- model.matrix(default~., data=Default)[,-1]
+                    dim(data)
+                    x.train <<- as.matrix(data[ind_train, ])
+                    y.train <<- as.matrix(ifelse(Default[ind_train, "default"]=="Yes",1,0))
+                    x.test <<- as.matrix(data[-ind_train, ])
+                    y.test <<- as.matrix(ifelse(Default[-ind_train, "default"]=="Yes", 1, 0))
+                    
+                  }else 
+                    if(i==10){
+                      # OJ: Purchase - Classification
+                      data("OJ")
+                      dim(OJ)
+                      n_full <- nrow(OJ)
+                      ind_train <- sample(n_full, 0.7*n_full)
+                      data <- model.matrix(Purchase~., data=OJ)[,-1]
+                      dim(data)
+                      x.train <<- as.matrix(data[ind_train, ])
+                      y.train <<- as.matrix(ifelse(OJ[ind_train, "Purchase"]=="MM",1,0))
+                      x.test <<- as.matrix(data[-ind_train, ])
+                      y.test <<- as.matrix(ifelse(OJ[-ind_train, "Purchase"]=="MM", 1, 0))
+                      
+                    }else 
+                      if(i==11){
+                        # Smarket : classification
+                        data("Smarket")
+                        dim(Smarket)
+                        Smarket <- subset(Smarket, select=-c(Today, Year))
+                        n_full <- nrow(Smarket)
+                        ind_train <- sample(n_full, 0.7*n_full)
+                        data <- model.matrix(Direction~., data=Smarket)[,-1]
+                        dim(data)
+                        x.train <<- as.matrix(data[ind_train, ])
+                        y.train <<- as.matrix(ifelse(Smarket[ind_train, "Direction"]=="Up",1,0))
+                        x.test <<- as.matrix(data[-ind_train, ])
+                        y.test <<- as.matrix(ifelse(Smarket[-ind_train, "Direction"]=="Up", 1, 0))
+                        
+                      }else 
+                        if(i==12){
+                          # Weekly - classification
+                          data("Weekly")
+                          dim(Weekly)
+                          Weekly <- subset(Weekly, select=-c(Today, Year))
+                          n_full <- nrow(Weekly)
+                          ind_train <- sample(n_full, 0.7*n_full)
+                          data <- model.matrix(Direction~., data=Weekly)[,-1]
+                          dim(data)
+                          x.train <<- as.matrix(data[ind_train, ])
+                          y.train <<- as.matrix(ifelse(Weekly[ind_train, "Direction"]=="Up",1,0))
+                          x.test <<- as.matrix(data[-ind_train, ])
+                          y.test <<- as.matrix(ifelse(Weekly[-ind_train, "Direction"]=="Up", 1, 0))
+                          
+                        }
+} 
+
+#Loss function
+loss_mse <- function(y,y.hat){
+  sum((y-y.hat)^2)
+}
+
+
+
+#Function for training agt model with sampling. samSize = 1 should give ordinary agt model
+#Forced continued learning should be set to TRUE as generalization loss reduction estimator is not functioning
+#Returns list containing:
+#mod - list of all agt models(trees)
+#gen.loss - vector of Estimated generalization loss for all agt models(trees)
+#train.loss - vector of training loss at each iteration
+#Nleaves - Vector of nleaves of all agt models(trees)
+sampling.agt.train <- function(samSize, learnRate, Nrounds, Xtrain, Ytrain, 
+                               force_continued_learning = FALSE, bootstrap = FALSE){
+  
+  gen.loss = matrix(0,Nrounds,1)
+  train.loss = matrix(0,Nrounds,1)
+  nleaves = matrix(0,Nrounds,1)
+  modlist = list()
+  i = 1
+  
+  reduction = TRUE
+  
+  if (samSize == 1){
+    x.train.samp = x.train
+    y.train.samp = y.train
+  } else{
+    smp_size <- floor(samSize * nrow(x.train))
+    train_ind <- sample(seq_len(nrow(x.train)), size = smp_size, replace = bootstrap)
+    x.train.samp <- x.train[train_ind, ]
+    y.train.samp <- y.train[train_ind, ]
+  }
+  
+  #Train first tree with initial prediction
+  cand.mod <- gbt.train(y.train.samp, x.train.samp, learnRate, nrounds = 1,
+                        verbose = 0, greedy_complexities = F)
+  
+  gen.loss[i,1] = cand.mod$estimate_generalization_loss(0)
+  nleaves[i,1] = cand.mod$get_num_trees()
+  
+  train.pred = matrix(numeric(nrow(y.train)))
+  
+  while (reduction & i<(Nrounds)){
+    
+    modlist = c(modlist, list(cand.mod))
+    
+    samp.mod = cand.mod
+    
+    train.pred <- train.pred + predict(samp.mod, x.train)
+    
+    
+    if (samSize == 1){
+      x.train.samp = x.train
+      y.train.samp = y.train
+      train.pred.samp = train.pred
+    } else{
+      smp_size <- floor(samSize * nrow(x.train))
+      train_ind <- sample(seq_len(nrow(x.train)), size = smp_size, replace=bootstrap)
+      x.train.samp <- x.train[train_ind, ]
+      y.train.samp <- y.train[train_ind, ]
+      train.pred.samp <- train.pred[train_ind, ]
+    }
+    
+    #Train trees without initial prediction by previous_pred
+    cand.mod <- gbt.train(y.train.samp, x.train.samp, learnRate, nrounds = 1,
+                          verbose = 0, greedy_complexities = F, previous_pred = train.pred.samp)
+    i = i+1
+    gen.loss[i,1] = cand.mod$estimate_generalization_loss(0)
+    train.loss[i-1,1] = loss_mse(train.pred, y.train)
+    nleaves[i,1] = cand.mod$get_num_leaves()
+    if(!force_continued_learning){
+      reduction = (gen.loss[i,1]-gen.loss[i-1,1] < 0)
+    }
+    
+  }
+  
+  mod <- list("mod" = modlist, "gen.loss" = gen.loss, "train.loss" = train.loss, 
+              "Nleaves" = nleaves, "Nrounds" = Nrounds, "SmpSize" = samSize)
+  
+  return (mod)
+}
+
+
+
+#Function for predicting with sampling.agt model. 
+#Loops through all trees and adds to prediction.
+sampling.agt.pred <- function(mod, Xtest){
+  test.pred = matrix(numeric(nrow(y.test)))
+  for (i in 1:length(mod)){
+    test.pred <- test.pred + predict(mod[[i]], Xtest)
+  }
+  return(test.pred)
+}
+
+
+#Function for calculating loss with sampling.agt model.
+#Equal to sampling.agt.pred, but calculates loss at each iteration
+sampling.agt.loss <- function(mod, Xtest, Ytest){
+  loss = matrix(numeric(length(mod)))
+  test.pred = matrix(numeric(nrow(y.test)))
+  for (i in 1:length(mod)){
+    test.pred <- test.pred + predict(mod[[i]], Xtest)
+    loss[i] <- loss_mse(Ytest, test.pred)
+  }
+  return(loss)
+}
+
+#Function for calculating loss for agt model. 
+agt.loss <- function(mod, Xtest, Ytest){
+  loss = matrix(numeric(length(mod$get_num_trees())))
+  for (i in 1:mod$get_num_trees()){
+    test.pred <- mod$predict2(Xtest, i)
+    loss[i] <- loss_mse(Ytest, test.pred)
+  }
+  return(loss)
+}
+
+```
+
+
+
+
+
+
+
+
+
+## Testing
+
+
+Training sampling, sampling size 1, and agt model on  time on 7 different datasets
+Calculating train, test and estimated gen loss for both models.
+
+```{r}
+set.seed(1295)
+seed = 1295
+B = 10
+seeds <- sample(1e5, B) 
+param <- list("learning_rate" = 0.1, "samSize" = 1, "nrounds"=1000)
+
+
+
+agt_models = list() #List of all agt-models, agt_models[[i]][[b]] gives dataset i, iteration b
+models = list() #List of all sampling models
+test_loss = list() #List of all test loss for sampling models
+agt_test_loss = list() #List of all test loss for agt models
+agt_train_loss = list() #List of all train loss for agt models
+agt_estgen_loss = list() #List of all estimated generalization loss for agt models
+
+res <- list() #List of all mse of all models for all iterations on all datasets
+
+for(i in 1:7){
+  pb <- txtProgressBar(min = 0, max = B*7, style = 3)
+  sub_models = list()
+  sub_agt_models = list()
+  sub_test_loss = list()
+  sub_agt_test_loss = list()
+  sub_agt_train_loss = list()
+  sub_agt_estgen_loss = list()
+  res_mat <- matrix(nrow=B, ncol=2)
+  for (b in 1:B){
+    #cat("iter: ", i,"\n")
+    dataset(i, seeds[b])
+    
+    set.seed(seeds[b])
+    mod = sampling.agt.train(param$samSize, param$learning_rate, param$nrounds, x.train, y.train,
+                             force_continued_learning = TRUE)
+    sub_models = c(sub_models, list(mod))
+    sam.pred = sampling.agt.pred(mod$mod, x.test)
+    
+    test_mse = sampling.agt.loss(mod$mod, x.test, y.test)
+    sub_test_loss = c(sub_test_loss, list(test_mse))
+    
+    
+    set.seed(seeds[b])
+    agt.mod = gbt.train(y.train, x.train, param$learning_rate, nrounds = param$nrounds,
+                      verbose = 0, greedy_complexities = F, force_continued_learning = TRUE)
+    sub_agt_models = c(sub_agt_models, list(agt.mod))
+    agt.pred = predict(agt.mod, x.test)
+    
+    agt_test_mse = agt.loss(agt.mod, x.test, y.test)
+    sub_agt_test_loss = c(sub_agt_test_loss, list(agt_test_mse))
+    
+    agt_train_mse = agt.loss(agt.mod, x.train, y.train)
+    sub_agt_train_loss = c(sub_agt_train_loss, list(agt_train_mse))
+    
+    agt_est_gen_loss <- sapply(1:agt.mod$get_num_trees(), agt.mod$estimate_generalization_loss)
+    sub_agt_estgen_loss <- c(sub_agt_estgen_loss, list(agt_est_gen_loss))
+    
+    
+    res_mat[b, 1] <- loss_mse(y.test, sam.pred)
+    res_mat[b, 2] <- loss_mse(y.test, agt.pred)
+    res[[i]] <- res_mat
+    
+    setTxtProgressBar(pb, ((i*10)+b-10))
+  }
+  models = c(models, list(sub_models))
+  agt_models = c(agt_models, list(sub_agt_models))
+  test_loss = c(test_loss, list(sub_test_loss))
+  agt_test_loss = c(agt_test_loss, list(sub_agt_test_loss))
+  agt_train_loss = c(agt_train_loss, list(sub_agt_train_loss))
+  agt_estgen_loss <- c(agt_estgen_loss, list(sub_agt_estgen_loss))
+}
+
+```
+
+
+
+
+Comparing train, test and estgen loss for agt and agt sampling
+
+```{r}
+
+sets = c(1,2,3,4,5,6,7)   #dataset, between 1 and 7
+iters = c(1)   #seed, between 1 and 10
+
+for(i in sets){
+  for(b in iters){
+    plot((models[[i]][[b]]$gen.loss), main=paste("dataset: ", i), cex = 1, 
+         ylim = c(0, max(test_loss[[i]][[b]])/2), ylab = "Loss", xlab = "iter")
+    points((test_loss[[i]][[b]]), col = "green", cex = 1.2)
+    points((models[[i]][[b]]$train.loss), col = "red", cex = 1)
+    points((agt_estgen_loss[[i]][[b]]),col = "brown", cex = 0.8)
+    points((agt_test_loss[[i]][[b]]),col = "blue", cex = 0.4)
+    points((agt_train_loss[[i]][[b]]),col = "pink", cex = 0.5)
+    legend( x="topright", 
+          legend=c("Estgen loss","Test MSE", "Train MSE", "Agt Estgen loss", "agt Test MSE", "agt Train MSE"),
+          col=c("black","green", "red", "brown", "blue", "pink"), lwd=1, lty=c(1))
+    
+  }
+}
+```
+
+
+
+## Testing with Sampling
+
+
+Training on all 7 datasets 10 times with sampling
+
+```{r, figures-side, fig.show="hold", out.width="40%"}
+
+set.seed(1295)
+seed = 1295
+B = 10
+seeds <- sample(1e5, B) 
+param <- list("learning_rate" = 0.1, "samSize" = 0.7, "nrounds"=1000)
+
+
+
+sam_models = list() #List of all sampling models
+sam_test_loss = list() #List of all test loss for sampling models
+sam_res = list()
+for(i in 1:7){
+  pb <- txtProgressBar(min = 0, max = B*7, style = 3)
+  sub_models = list()
+  sub_test_loss = list()
+  res_mat <- matrix(nrow=B, ncol=1)
+  for (b in 1:B){
+    #cat("iter: ", i,"\n")
+    dataset(i, seeds[b])
+    
+    set.seed(seeds[b])
+    mod = sampling.agt.train(param$samSize, param$learning_rate, param$nrounds, x.train, y.train,
+                             force_continued_learning = TRUE)
+    sub_models = c(sub_models, list(mod))
+    sam.pred = sampling.agt.pred(mod$mod, x.test)
+    
+    test_mse = sampling.agt.loss(mod$mod, x.test, y.test)
+    sub_test_loss = c(sub_test_loss, list(test_mse))
+    
+    res_mat[b, 1] <- loss_mse(y.test, sam.pred)
+    sam_res[[i]] <- res_mat
+    
+    setTxtProgressBar(pb, ((i*10)+b-10))
+  }
+  sam_models = c(sam_models, list(sub_models))
+  sam_test_loss = c(sam_test_loss, list(sub_test_loss))
+}
+
+```
+
+
+
+
+Trying with bootstrap, replace = TRUE in sampling
+
+```{r}
+set.seed(1295)
+seed = 1295
+B = 10
+seeds <- sample(1e5, B) 
+param <- list("learning_rate" = 0.1, "samSize" = 0.7, "nrounds"=1000)
+
+
+
+boo_models = list() #List of all sampling models
+boo_test_loss = list() #List of all test loss for sampling models
+boo_res = list()
+for(i in 1:7){
+  pb <- txtProgressBar(min = 0, max = B*7, style = 3)
+  sub_models = list()
+  sub_test_loss = list()
+  res_mat <- matrix(nrow=B, ncol=1)
+  for (b in 1:B){
+    #cat("iter: ", i,"\n")
+    dataset(i, seeds[b])
+    
+    set.seed(seeds[b])
+    mod = sampling.agt.train(param$samSize, param$learning_rate, param$nrounds, x.train, y.train,
+                             force_continued_learning = TRUE, bootstrap = TRUE)
+    sub_models = c(sub_models, list(mod))
+    sam.pred = sampling.agt.pred(mod$mod, x.test)
+    
+    test_mse = sampling.agt.loss(mod$mod, x.test, y.test)
+    sub_test_loss = c(sub_test_loss, list(test_mse))
+    
+    res_mat[b, 1] <- loss_mse(y.test, sam.pred)
+    boo_res[[i]] <- res_mat
+    
+    setTxtProgressBar(pb, ((i*10)+b-10))
+  }
+  boo_models = c(boo_models, list(sub_models))
+  boo_test_loss = c(boo_test_loss, list(sub_test_loss))
+}
+```
+
+
+
+
+
+Comparing test loss in the 4 cases, agt, sampling model with samSize= 1, sampled and bootstrapped model
+
+```{r}
+sets = c(1,2,3,4,5,6,7)   #dataset, between 1 and 7
+iters = c(1,5,10)   #seed, between 1 and 10
+start = 50
+
+for(i in sets){
+  for(b in iters){
+    plot(((test_loss[[i]][[b]][start:999,1])), col = "brown", cex = 1.2, 
+         main = paste("Dataset: ", i, " Iteration: ", b))
+    points(((sam_test_loss[[i]][[b]][start:999,1])), col = "green", cex = 0.8)
+    points(((boo_test_loss[[i]][[b]][start:999,1])), col = "yellow", cex = 0.6)
+    points(((agt_test_loss[[i]][[b]][start:999])),col = "blue", cex = 0.4)
+    legend( x="topright", 
+          legend=c("Test MSE", "sampling Test MSE","boosting Test MSE", "agt test MSE"),
+          col=c("brown","green","yellow", "blue"), lwd=1, lty=c(1))
+    
+  }
+}
+```
+
+
+
+
+Mean test MSE for all models, with forced continued learning, Nrounds = 1000
+
+```{r}
+sets = c(1,2,3,4,5,6,7)   #dataset, between 1 and 7
+iters = c(1,2,3,4,5,6,7,8,9,10)   #seed, between 1 and 10
+
+
+for(i in sets){
+  
+  cat("Mean AGT test MSE: ", mean(res[[i]][,2]), "\n")
+  cat("Mean samAGT1 test MSE: ", mean(res[[i]][,1]), "\n")
+  cat("Mean samAGT0.7 test MSE: ", mean(sam_res[[i]][,1]), "\n")
+  cat("Mean booAGT0.7 test MSE: ", mean(boo_res[[i]][,1]), "\n\n\n")
+}
+```
+
+Plotting difference between agt test loss and sampling(samSize=1) test loss
+
+```{r}
+sets = c(1,2,3,4,5,6,7)   #dataset, between 1 and 7
+iters = c(1,2)   #seed, between 1 and 10
+
+
+for(i in sets){
+  for(b in iters){
+    plot((test_loss[[i]][[b]]-agt_test_loss[[i]][[b]][1:999])/agt_test_loss[[i]][[b]][1:999], 
+         col = "brown", cex = 1.2, 
+         ylab = "Diff between manual and automatic agt")
+    legend( x="topright", 
+          legend=c("Test MSE", "sampling Test MSE","boosting Test MSE", "agt test MSE"),
+          col=c("brown","green","yellow", "blue"), lwd=1, lty=c(1))
+    
+  }
+}
+```
+
+
+
+
